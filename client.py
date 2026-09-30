@@ -1,5 +1,19 @@
 import socket
-from xmlrpc import client
+
+#Part 3 will replace these with the real crypto module 
+def encrypt(text, alg, key): 
+    return text            # stub:returns the text unchanged
+def decrypt(data, alg, key): 
+    return data            # stub: returns the data unchanged
+def rsa_generate_keypair(): 
+    return ("1-1", "1-1")   # stub:encrypt the session key with the server's public key
+def rsa_encrypt(text, pub): 
+    return text             # returns the text unchanged
+def generate_session_key(alg):                      # stub:Part 3 will make a real random key
+    if alg == "CAESAR":
+        return "5"
+    return "0123456789abcdef"
+#
 
 #It loops over the fields, adds a comma between them, wraps them in brackets, and sends the encoded string.
 def send_packet(s, fields): # Build a packet string from a list, e.g. ["CM", "prompt", "ls"] -> "(CM,prompt,ls)", then send it.
@@ -52,5 +66,3 @@ def check_response(fields):
         return False
     return True
 
-print(check_response(["EE", "2", "File not found"]))
-print(check_response(["SC", "done"]))
