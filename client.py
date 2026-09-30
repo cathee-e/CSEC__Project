@@ -39,4 +39,18 @@ ERRORS = {1: "Unknown command",
           3: "Invalid arguments / permission denied",
           4: "Protocol or crypto error"}
 
-print(ERRORS[1])
+def check_response(fields):
+    # Every server response goes through here. EE = the server had an error.
+    # Returns True if the response is OK, False if it was an EE packet.
+    if fields[0] == "EE":
+        code = int(fields[1])                # the code arrives as text, so int() turns it into a number
+        if code in ERRORS:
+            name = ERRORS[code]              # look up the meaning of the code
+        else:
+            name = "Unknown error"
+        print("[ERROR " + str(code) + "] " + name + " - " + fields[2])
+        return False
+    return True
+
+print(check_response(["EE", "2", "File not found"]))
+print(check_response(["SC", "done"]))
