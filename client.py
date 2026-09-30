@@ -1,4 +1,5 @@
 import socket
+from xmlrpc import client
 
 #It loops over the fields, adds a comma between them, wraps them in brackets, and sends the encoded string.
 def send_packet(s, fields): # Build a packet string from a list, e.g. ["CM", "prompt", "ls"] -> "(CM,prompt,ls)", then send it.
@@ -24,4 +25,18 @@ def split_packet(msg, max_fields):
     fields.append(current)                   # the last field
     return fields
 
-print(split_packet("SS,hello, world", 3))     
+def recv_packet(s):
+    # Receive one packet and turn it into a list, e.g. "(EE,2,File not found)" -> ["EE", "2", "File not found"]
+    msg = s.recv(2024).decode("utf-8")       # bytes -> string (as in TCPClientExample.py)
+    msg = msg[1:len(msg) - 1]                # slicing removes the "(" at the start and ")" at the end
+    if msg[0:2] == "EE":
+        return split_packet(msg, 3)          # EE has 3 fields: type, code, description
+    return split_packet(msg, 2)              # other packets: type + the rest
+
+# Error codes (must match the server, maximum 4)
+ERRORS = {1: "Unknown command",
+          2: "File not found",
+          3: "Invalid arguments / permission denied",
+          4: "Protocol or crypto error"}
+
+print(ERRORS[1])
