@@ -229,14 +229,7 @@ def handle_client(client_socket, address):
 
                 print("Sent file contents")
 
-                # Tell the client the command completed successfully
-                success_packet = "(SC)"
-
-                client_socket.send(
-                    success_packet.encode("utf-8")
-                )
-
-                print("Sent:", success_packet)
+            
 
             except FileNotFoundError:
                 send_error(
@@ -260,14 +253,22 @@ def handle_client(client_socket, address):
                     3,
                     "Unable to read file"
                 )
-                
+
         elif command_type == "openWrite":
             print("openWrite requested for:", arguments)
 
             filename = arguments
 
             try:
-                # Wait for the Data Packet from the client
+                # First confirm that the server is ready
+                success_packet = "(SC)"
+                client_socket.send(
+                    success_packet.encode("utf-8")
+                )
+
+                print("Sent:", success_packet)
+
+                # Now wait for the Data Packet
                 data = client_socket.recv(4096)
 
                 if not data:
@@ -278,7 +279,7 @@ def handle_client(client_socket, address):
 
                 print("Received:", data_message)
 
-                # Make sure we received a DP packet
+                # Make sure the next packet is a DP packet
                 if not data_message.startswith("(DP,"):
                     send_error(
                         client_socket,
@@ -295,9 +296,12 @@ def handle_client(client_socket, address):
                 with open(filename, "w") as file:
                     file.write(file_contents)
 
-                print("File written successfully:", filename)
+                print(
+                    "File written successfully:",
+                    filename
+                )
 
-                # Tell the client the operation succeeded
+                # Tell the client that writing succeeded
                 success_packet = "(SC)"
 
                 client_socket.send(
