@@ -103,3 +103,14 @@ def run_prompt(s):
         else:
             print("Server: done")
 
+def open_read(s, alg, key):
+    # openRead: ask the server for a file's contents (encrypted if secure)
+    name = input("File name to read: ")
+    send_packet(s, ["CM", "openRead", name])
+    resp = recv_packet(s)                    # SC with the contents, or EE if there was an error
+    if check_response(resp):                 #if the reply is not an error, continue.
+        data = resp[1]
+        if alg != "":                        # secure mode: decrypt what the server sent
+            data = decrypt(data, alg, key)
+        print("----- file contents -----")
+        print(data)
