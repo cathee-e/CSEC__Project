@@ -114,3 +114,16 @@ def open_read(s, alg, key):
             data = decrypt(data, alg, key)
         print("----- file contents -----")
         print(data)
+
+def open_write(s, alg, key):
+    # openWrite: tell the server the file name, then send the text in a DP packet
+    name = input("File name to write: ")
+    send_packet(s, ["CM", "openWrite", name])
+    if not check_response(recv_packet(s)):   # the server may refuse before we send any data
+        return
+    text = input("Text to save in the file: ")
+    if alg != "":                            # secure mode: encrypt before sending
+        text = encrypt(text, alg, key)
+    send_packet(s, ["DP", text])
+    if check_response(recv_packet(s)):
+        print("File saved.")
