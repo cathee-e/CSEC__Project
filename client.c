@@ -1,11 +1,12 @@
 // client.c - RFMP C client (non-secure, openRead only) for Windows
-// Stage 1: create a socket and connect to the server
+// Stage 2: connect, send the start packet (SS) and check for the (CC) reply
 #include <stdio.h>
 #include <string.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
 #define PORT "8888"
+#define BUFFER_SIZE 4096
 
 int main() {
     WSADATA wsa;
@@ -13,6 +14,9 @@ int main() {
     struct addrinfo hints, *result;
     struct sockaddr_in *addr;
     char host[256];
+    char packet[512];
+    char buffer[BUFFER_SIZE];
+    int received;
 
     // Start Winsock (needed on Windows before using sockets)
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
@@ -50,8 +54,31 @@ int main() {
         return 1;
     }
     printf("Connected to the server\n");
-
     freeaddrinfo(result);
+
+    // ---------- SETUP PHASE ----------
+    // Start packet: protocol RFMP, version v1.0, 0 = no security
+    strcpy(packet, "(SS,RFMP,v1.0,0)");
+    send(s, packet, strlen(packet), 0);
+
+    // Wait for the server's reply, which should be (CC)
+    received = recv(s, buffer, BUFFER_SIZE - 1, 0);
+    if (received <= 0) {
+        printf("No reply from the server\n");
+        closesocket(s);
+        WSACleanup();
+        return 1;
+    }
+    buffer[received] = '\0';
+
+    if (strcmp(buffer, "(CC)") != 0) {
+        printf("Expected (CC), got: %s\n", buffer);
+        closesocket(s);
+        WSACleanup();
+        return 1;
+    }
+    printf("Server confirmed the connection\n");
+
     closesocket(s);
     WSACleanup();
     return 0;
