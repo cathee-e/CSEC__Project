@@ -1,5 +1,5 @@
 // client.c - RFMP C client (non-secure, openRead only) for Windows
-// Stage 2: connect, send the start packet (SS) and check for the (CC) reply
+// Stage 3: connect, setup phase (SS/CC), then send openRead and print the reply
 #include <stdio.h>
 #include <string.h>
 #include <winsock2.h>
@@ -14,6 +14,7 @@ int main() {
     struct addrinfo hints, *result;
     struct sockaddr_in *addr;
     char host[256];
+    char filename[256];
     char packet[512];
     char buffer[BUFFER_SIZE];
     int received;
@@ -78,6 +79,33 @@ int main() {
         return 1;
     }
     printf("Server confirmed the connection\n");
+
+    // ---------- OPERATION PHASE: openRead ----------
+    printf("File name to read: ");
+    fgets(filename, sizeof(filename), stdin);
+    filename[strcspn(filename, "\n")] = '\0';     // remove the newline from fgets
+
+    // Command packet: (CM,openRead,filename)
+    sprintf(packet, "(CM,openRead,%s)", filename);
+    send(s, packet, strlen(packet), 0);
+
+    // The server answers with a Data Packet (DP) or an Exception packet (EE)
+    received = recv(s, buffer, BUFFER_SIZE - 1, 0);
+    if (received > 0) {
+        buffer[received] = '\0';
+
+        if (strncmp(buffer, "(DP,", 4) == 0) {
+            // Print what is between "(DP," and the final ")"
+            buffer[received - 1] = '\0';
+            printf("----- file contents -----\n%s\n", buffer + 4);
+        } else if (strncmp(buffer, "(EE,", 4) == 0) {
+            printf("Server error: %s\n", buffer);
+        } else {
+            printf("Unexpected reply: %s\n", buffer);
+        }
+    } else {
+        printf("No reply from the server\n");
+    }
 
     closesocket(s);
     WSACleanup();
