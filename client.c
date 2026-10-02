@@ -1,5 +1,5 @@
 // client.c - RFMP C client (non-secure, openRead only) for Windows
-// Stage 3: connect, setup phase (SS/CC), then send openRead and print the reply
+// Stage 4: connect, setup phase (SS/CC), openRead, then the closing phase (End)
 #include <stdio.h>
 #include <string.h>
 #include <winsock2.h>
@@ -106,6 +106,12 @@ int main() {
     } else {
         printf("No reply from the server\n");
     }
+
+    // ---------- CLOSING PHASE ----------
+    // Tell the server we are finished
+    strcpy(packet, "(End)");
+    send(s, packet, strlen(packet), 0);
+    printf("Sent (End), connection closed\n");
 
     closesocket(s);
     WSACleanup();
