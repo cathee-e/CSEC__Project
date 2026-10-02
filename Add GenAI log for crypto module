@@ -1,0 +1,234 @@
+# GenAI Log - Crypto module
+
+**AI tool used:** Claude (claude.ai chat)
+**What I used it for:** planning Part 3, and generating the crypto module (Caesar, RSA, AES).
+
+The prompts below are my real messages from the conversation (quoted as I wrote them). Where I describe what the AI answered, I summarise it, and the final code is pasted in full. The "My comments" sections explain the code in my own words.
+
+---
+
+## 1. Caesar cipher
+
+**Prompt (to build the module):**
+> Can u give me the ai generated encryption code for the crypto module
+
+**AI output:**
+```python
+# ---------------- CAESAR ----------------
+def caesar_encrypt(text, shift):
+    # Shift each letter forward by 'shift', wrapping around the alphabet.
+    # Other characters (digits, spaces, commas) are left unchanged.
+    result = ""
+    for ch in text:
+        if ch >= "A" and ch <= "Z":
+            result = result + chr((ord(ch) - ord("A") + shift) % 26 + ord("A"))
+        elif ch >= "a" and ch <= "z":
+            result = result + chr((ord(ch) - ord("a") + shift) % 26 + ord("a"))
+        else:
+            result = result + ch
+    return result
+
+
+def caesar_decrypt(text, shift):
+    # Decrypting is shifting backwards
+    return caesar_encrypt(text, -shift)
+```
+
+**My comments:**
+- The function looks at one character at a time.
+- For a letter, `ord` turns it into a number, I add the shift, `% 26` wraps from Z back to A, and `chr` turns it back into a letter.
+- Capital and small letters are handled separately so the case stays the same.
+- Digits, spaces and commas are not changed, so the encrypted text never adds a comma or bracket that would break a packet.
+- Decrypting is the same function with a negative shift.
+- For Caesar the session key is just the shift number. It travels as text, so the dispatcher converts it with `int(key)`.
+
+---
+
+## 2. RSA
+
+**Prompt:** Same request as above.
+
+**AI output:**
+```python
+# ---------------- RSA ----------------
+def is_prime(n):
+    # A number is prime if nothing from 2 up to its square root divides it
+    if n < 2:
+        return False
+    for i in range(2, int(n ** 0.5) + 1):
+        if n % i == 0:
+            return False
+    return True
+
+
+def gcd(a, b):
+    # Euclid's algorithm: greatest common divisor
+    while b != 0:
+        a, b = b, a % b
+    return a
+
+
+def rsa_generate_keypair():
+    # Returns (public, private) as strings "e-n" and "d-n"
+    primes = []
+    for x in range(100, 1000):
+        if is_prime(x):
+            primes.append(x)
+
+    p = random.choice(primes)
+    q = random.choice(primes)
+    while q == p:                       # p and q must be different
+        q = random.choice(primes)
+
+    n = p * q
+    phi = (p - 1) * (q - 1)
+
+    e = 17                              # e must share no factor with phi
+    while gcd(e, phi) != 1:
+        e = e + 2
+
+    d = 1                               # d is where (e * d) % phi == 1
+    while (e * d) % phi != 1:
+        d = d + 1
+
+    return (str(e) + "-" + str(n), str(d) + "-" + str(n))
+
+
+def rsa_encrypt(text, pub):
+    # Encrypt each character: (character number ** e) % n
+    parts = pub.split("-")
+    e = int(parts[0])
+    n = int(parts[1])
+    numbers = []
+    for ch in text:
+        numbers.append(str(pow(ord(ch), e, n)))   # pow(a, b, n) = (a ** b) % n
+    return ".".join(numbers)            # dots, because commas would break the packet
+
+
+def rsa_decrypt(data, priv):
+    # Decrypt each number: (number ** d) % n, then turn it back into a character
+    parts = priv.split("-")
+    d = int(parts[0])
+    n = int(parts[1])
+    text = ""
+    for num in data.split("."):
+        text = text + chr(pow(int(num), d, n))
+    return text
+```
+
+**My comments:**
+- RSA is only used to protect the session key while it travels from the client to the server.
+- `is_prime` tries to divide `n` by every number up to its square root. I collect the primes between 100 and 999 and pick two different ones, `p` and `q`.
+- `n = p * q` is part of both keys. `phi = (p-1)*(q-1)` is used to calculate the exponents.
+- `e` is the public exponent. It must have no common factor with `phi`, which the `gcd` function checks.
+- `d` is the private exponent. It is the number where `(e * d) % phi == 1`, so decrypting undoes encrypting.
+- A key is stored as the string `"e-n"` or `"d-n"`. I use a hyphen because a comma would split the packet.
+- Encrypting turns each character into a number with `ord` and computes `(number ** e) % n` (using `pow` with three arguments, which does it efficiently). Decrypting computes `(number ** d) % n` and turns it back into a character with `chr`. The numbers are joined with dots for the same reason as the hyphen.
+- The server keeps the private key. The client locks the session key with the server's public key, so only the server can open it.
+
+---
+
+## 3. AES
+
+**Prompts:**
+> Can I make this from scratch?
+> What about pycryptodome?
+> okay lets do that then
+
+**AI output (summary):** AES from scratch would be about 150 to 200 lines (S-box, key expansion, SubBytes, ShiftRows, MixColumns, AddRoundKey). With `pycryptodome` it is about 12 lines. I chose the library.
+
+```python
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
+
+
+# ---------------- AES ----------------
+def aes_encrypt(text, key):
+    # AES-128 in CBC mode. The key is the 16-character session key.
+    iv = get_random_bytes(16)                         # random starting block
+    cipher = AES.new(key.encode("utf-8"), AES.MODE_CBC, iv)
+    padded = pad(text.encode("utf-8"), 16)            # pad to a multiple of 16 bytes
+    ciphertext = cipher.encrypt(padded)
+    return (iv + ciphertext).hex()                    # hex has no commas or brackets
+
+
+def aes_decrypt(data, key):
+    raw = bytes.fromhex(data)                         # hex text back to bytes
+    iv = raw[:16]                                     # first 16 bytes are the IV
+    ciphertext = raw[16:]
+    cipher = AES.new(key.encode("utf-8"), AES.MODE_CBC, iv)
+    padded = cipher.decrypt(ciphertext)
+    return unpad(padded, 16).decode("utf-8")          # remove the padding
+```
+
+**My comments:**
+- AES is symmetric: the same session key encrypts and decrypts, which is why the key has to be sent securely with RSA first.
+- A 16-character key is 16 bytes = 128 bits, so this is AES-128.
+- AES works on blocks of 16 bytes. `pad` fills the text up to a multiple of 16, and `unpad` removes it after decrypting.
+- CBC mode mixes each block with the previous encrypted block, so repeated text does not give repeated output.
+- The IV is a random starting block. It is placed in front of the ciphertext so the receiver can use it when decrypting.
+- The output is converted to hex so it contains no commas or brackets.
+- The library needs `pip install pycryptodome` on every computer that runs the code.
+
+---
+
+## 4. Session key, dispatchers and self-test
+
+**Prompt: same request as above (part of the full crypto module)**
+
+**AI output:**
+```python
+# ---------------- SESSION KEY AND DISPATCHERS ----------------
+def generate_session_key(alg):
+    if alg == "CAESAR":
+        return str(random.randint(1, 25))             # a shift, sent as text
+    letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    key = ""
+    for i in range(16):                               # 16 characters = AES-128 key
+        key = key + random.choice(letters)
+    return key
+
+
+def encrypt(text, alg, key):
+    if alg == "AES":
+        return aes_encrypt(text, key)
+    return caesar_encrypt(text, int(key))
+
+
+def decrypt(data, alg, key):
+    if alg == "AES":
+        return aes_decrypt(data, key)
+    return caesar_decrypt(data, int(key))
+
+
+# ---------------- SELF-TEST ----------------
+if __name__ == "__main__":
+    for alg in ["CAESAR", "AES"]:
+        k = generate_session_key(alg)
+        secret = encrypt("Hello, World", alg, k)
+        print(alg, "key:", k, "encrypted:", secret)
+        assert decrypt(secret, alg, k) == "Hello, World"
+
+    pub, priv = rsa_generate_keypair()
+    sk = generate_session_key("AES")
+    assert rsa_decrypt(rsa_encrypt(sk, pub), priv) == sk
+    print("RSA public key:", pub)
+    print("All tests passed")
+```
+
+**Test result (my run):**
+```
+CAESAR key: 20 encrypted: Byffi, Qilfx
+AES key: qPRaFLTUjxQYhgEN encrypted: 73c1d53e36f1dd21aeb5fd5eac149d966cf6f2841b2b128ea82f2d6e13e87ff9
+RSA public key: 17-149573
+All tests passed
+```
+
+**My comments:**
+- `generate_session_key` returns a shift from 1 to 25 for Caesar and 16 random letters and digits for AES.
+- `encrypt` and `decrypt` look at the algorithm name and call the right function, so the client and server only use these two.
+- The self-test at the bottom runs when I execute the file directly. It checks that Caesar and AES decrypt back to the original text and that RSA recovers a session key.
+- My first run printed nothing because the file was not saved, so I saved it and ran it again.
+
+---
