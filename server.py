@@ -3,6 +3,7 @@ import threading
 import subprocess
 import os
 
+from crypto_module import rsa_generate_keypair, rsa_decrypt, encrypt, decrypt
 
 def send_error(client_socket, error_code, description):
     error_packet = "(EE," + str(error_code) + "," + description + ")"
@@ -12,6 +13,8 @@ def send_error(client_socket, error_code, description):
 
 def handle_client(client_socket, address):
     print("Handling client:", address)
+    algorithm = ""
+    session_key = ""
 
     # Receive the start packet from the client
     data = client_socket.recv(1024)
@@ -54,7 +57,80 @@ def handle_client(client_socket, address):
     # Secure setup will be connected to the crypto module later
     elif secure_mode == "1":
         print("Secure communication requested")
-        print("Secure setup will be integrated with the crypto module")
+
+        try:
+            # Generate an RSA key pair for this connection
+            public_key, private_key = rsa_generate_keypair()
+
+            print("RSA key pair generated")
+
+            # Send the server public key to the client
+            confirmation = "(CC," + public_key + ")"
+
+            client_socket.send(
+                confirmation.encode("utf-8")
+            )
+
+            print("Sent:", confirmation)
+
+            # Wait for the client's EC packet
+            data = client_socket.recv(4096)
+
+            if not data:
+                print("Client disconnected during secure setup")
+                client_socket.close()
+                return
+
+            ec_message = data.decode("utf-8")
+
+            print("Received:", ec_message)
+
+            # EC packet:
+            # (EC,algorithm,encrypted_session_key,username:public_key)
+            ec_packet = ec_message.strip("()").split(",", 3)
+
+            if len(ec_packet) != 4 or ec_packet[0] != "EC":
+                send_error(
+                    client_socket,
+                    4,
+                    "Invalid EC packet"
+                )
+                client_socket.close()
+                return
+
+            algorithm = ec_packet[1]
+            encrypted_session_key = ec_packet[2]
+
+            # Only AES and CAESAR are valid
+            if algorithm != "AES" and algorithm != "CAESAR":
+                send_error(
+                    client_socket,
+                    4,
+                    "Invalid encryption algorithm"
+                )
+                client_socket.close()
+                return
+
+            # Decrypt the session key using the server private key
+            session_key = rsa_decrypt(
+                encrypted_session_key,
+                private_key
+            )
+
+            print("Secure setup complete")
+            print("Algorithm:", algorithm)
+
+        except Exception as e:
+            print("Secure setup error:", e)
+
+            send_error(
+                client_socket,
+                4,
+                "Secure setup failed"
+            )
+
+            client_socket.close()
+            return
 
     else:
         send_error(client_socket, 4, "Invalid security option")
@@ -220,6 +296,14 @@ def handle_client(client_socket, address):
 
                 print("File read successfully")
 
+                # Encrypt file contents in secure mode
+                if secure_mode == "1":
+                    file_contents = encrypt(
+                        file_contents,
+                        algorithm,
+                        session_key
+                    )
+
                 # Send the file contents in a Data Packet
                 data_packet = "(DP," + file_contents + ")"
 
@@ -291,6 +375,14 @@ def handle_client(client_socket, address):
                 # Remove "(DP," from the beginning
                 # and ")" from the end
                 file_contents = data_message[4:-1]
+
+                # Decrypt file contents in secure mode
+                if secure_mode == "1":
+                    file_contents = decrypt(
+                        file_contents,
+                        algorithm,
+                        session_key
+                    )
 
                 # Open/create the file in write mode
                 with open(filename, "w") as file:
