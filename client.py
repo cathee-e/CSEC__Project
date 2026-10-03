@@ -1,19 +1,7 @@
 import socket
 
-#Part 3 will replace these with the real crypto module 
-def encrypt(text, alg, key): 
-    return text            # stub:returns the text unchanged
-def decrypt(data, alg, key): 
-    return data            # stub: returns the data unchanged
-def rsa_generate_keypair(): 
-    return ("1-1", "1-1")   # stub:encrypt the session key with the server's public key
-def rsa_encrypt(text, pub): 
-    return text             # returns the text unchanged
-def generate_session_key(alg):                      # stub:Part 3 will make a real random key
-    if alg == "CAESAR":
-        return "5"
-    return "0123456789abcdef"
-#
+# Crypto functions
+from crypto_module import encrypt, decrypt, rsa_generate_keypair, rsa_encrypt, generate_session_key
 
 #step 1: Builds and sends every packet (SS, EC, CM, DP, End).
 #It loops over the fields, adds a comma between them, wraps them in brackets, and sends the encoded string.
@@ -94,8 +82,10 @@ def setup_phase(s, secure):
     session_key = generate_session_key(alg)              # made by the crypto module (Part 3)
     my_public, my_private = rsa_generate_keypair()       # the spec says the client also has an RSA pair
     encrypted_key = rsa_encrypt(session_key, server_public_key)  # only the server's private key can open it
-    send_packet(s, ["EC", alg, encrypted_key, "user1:" + my_public])
+    username = input("Username: ")                       # the spec wants username:Client_public_key
+    send_packet(s, ["EC", alg, encrypted_key, username + ":" + my_public])
     return alg, session_key
+   
  
  
 def run_prompt(s):
