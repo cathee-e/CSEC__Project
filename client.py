@@ -1,6 +1,6 @@
 import socket
 
-# Crypto functions
+# Crypto functions written in Part 3 (needs: pip install pycryptodome)
 from crypto_module import encrypt, decrypt, rsa_generate_keypair, rsa_encrypt, generate_session_key
 
 #step 1: Builds and sends every packet (SS, EC, CM, DP, End).
@@ -30,10 +30,45 @@ def split_packet(msg, max_fields):
     return fields
 
 #step3: Receives every server reply and turns it into fields.
+# TCP is a stream: two packets sent back to back (like DP then SC after openRead) can arrive in ONE recv,
+# and a long packet can arrive in pieces. So we keep what we have not used yet in "pending".
+pending = [""]                               # a list, so functions can change it without "global"
+
+
+def starts_new_packet(rest):
+    # True if the text in "rest" begins with a real packet such as (SC) or (DP,...)
+    if rest[0:5] == "(End)":
+        return True
+    if rest[0:1] == "(" and rest[1:3] in ["SS", "CC", "EC", "CM", "DP", "SC", "EE"]:
+        if rest[3:4] == "," or rest[3:4] == ")":
+            return True
+    return False
+
+
+def find_packet_end(data):
+    # Position of the ")" that closes the first packet. A ")" inside file text does not count,
+    # because after the real end there is either nothing or the start of another packet.
+    for i in range(len(data)):
+        if data[i] == ")":
+            rest = data[i + 1:]
+            if rest == "" or starts_new_packet(rest):
+                return i
+    return len(data) - 1
+
+
 def recv_packet(s):
-    # Receive one packet and turn it into a list, e.g. "(EE,2,File not found)" -> ["EE", "2", "File not found"]
-    msg = s.recv(2024).decode("utf-8")       # bytes -> string (as in TCPClientExample.py)
-    msg = msg[1:len(msg) - 1]                # slicing removes the "(" at the start and ")" at the end
+    # Receive ONE packet and turn it into a list, e.g. "(EE,2,File not found)" -> ["EE", "2", "File not found"]
+    while pending[0] == "" or pending[0][len(pending[0]) - 1] != ")":   # no complete packet yet
+        chunk = s.recv(4096).decode("utf-8")  # bytes -> string (4096 so long encrypted file contents fit)
+        if chunk == "":                       # empty means the server closed the connection
+            break
+        pending[0] = pending[0] + chunk
+    data = pending[0]
+    if data == "":
+        return ["EE", "4", "Connection closed by the server"]
+    end = find_packet_end(data)
+    msg = data[1:end]                         # slicing removes the "(" at the start and ")" at the end
+    pending[0] = data[end + 1:]               # keep anything that belongs to the next packet
     if msg[0:2] == "EE":
         return split_packet(msg, 3)          # EE has 3 fields: type, code, description
     return split_packet(msg, 2)              # other packets: type + the rest
@@ -85,7 +120,6 @@ def setup_phase(s, secure):
     username = input("Username: ")                       # the spec wants username:Client_public_key
     send_packet(s, ["EC", alg, encrypted_key, username + ":" + my_public])
     return alg, session_key
-   
  
  
 def run_prompt(s):
@@ -111,6 +145,8 @@ def open_read(s, alg, key):
             data = decrypt(data, alg, key)
         print("----- file contents -----")
         print(data)
+        success = recv_packet(s)             # the server sends a final SC (or EE) after the data
+        check_response(success)
  
  
 def open_write(s, alg, key):
@@ -157,4 +193,3 @@ def main():
  
 if __name__ == '__main__':
     main()
- 
