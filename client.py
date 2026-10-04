@@ -85,7 +85,8 @@ def setup_phase(s, secure):
     username = input("Username: ")                       # the spec wants username:Client_public_key
     send_packet(s, ["EC", alg, encrypted_key, username + ":" + my_public])
     return alg, session_key
-   
+    send_packet(s, ["EC", alg, encrypted_key, "user1:" + my_public])
+    return alg, session_key
  
  
 def run_prompt(s):
