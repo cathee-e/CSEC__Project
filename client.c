@@ -8,6 +8,17 @@
 #define PORT "8888"
 #define BUFFER_SIZE 4096
 
+// Checks the server's final reply after a command (SC = success, EE = error)
+void check_final_response(const char *reply) {
+    if (strcmp(reply, "(SC)") == 0) {
+        printf("Server confirmed: success\n");
+    } else if (strncmp(reply, "(EE,", 4) == 0) {
+        printf("Server error: %s\n", reply);
+    } else {
+        printf("Unexpected reply: %s\n", reply);
+    }
+}
+
 int main() {
     WSADATA wsa;
     SOCKET s;
@@ -95,9 +106,31 @@ int main() {
         buffer[received] = '\0';
 
         if (strncmp(buffer, "(DP,", 4) == 0) {
+            int got_sc = 0;
+
+            // TCP can deliver "(DP,text)(SC)" in one recv, so check for that first
+            if (received >= 4 && strcmp(buffer + received - 4, "(SC)") == 0) {
+                received = received - 4;      // cut the (SC) off the end
+                buffer[received] = '\0';
+                got_sc = 1;
+            }
+
             // Print what is between "(DP," and the final ")"
             buffer[received - 1] = '\0';
             printf("----- file contents -----\n%s\n", buffer + 4);
+
+            if (got_sc) {
+                printf("Server confirmed: success\n");
+            } else {
+                // The (SC) came separately, so receive it now
+                received = recv(s, buffer, BUFFER_SIZE - 1, 0);
+                if (received > 0) {
+                    buffer[received] = '\0';
+                    check_final_response(buffer);
+                } else {
+                    printf("No final reply from the server\n");
+                }
+            }
         } else if (strncmp(buffer, "(EE,", 4) == 0) {
             printf("Server error: %s\n", buffer);
         } else {
